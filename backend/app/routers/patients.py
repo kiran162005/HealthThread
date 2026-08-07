@@ -1,13 +1,20 @@
+import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.database import get_db
 from app import models, schemas, auth, security
+from app.services import crypto, extraction, explain
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 require_patient = auth.require_role("patient")
+
+STORAGE_DIR = Path(os.getenv("DOCUMENT_STORAGE_DIR", "storage/documents"))
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.get("/me/timeline", response_model=list[schemas.TimelineEntryOut])
@@ -24,37 +31,87 @@ def get_my_timeline(
 
 
 @router.post("/me/documents", response_model=schemas.DocumentOut, status_code=201)
-def upload_document(
-    payload: schemas.DocumentUpload,
+async def upload_document(
+    doc_type: str = Form(...),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_patient),
 ):
-    """Stores only what the client already encrypted (file_url pointer +
-    IV + auth tag). Plaintext extraction/explanation happens in a later
-    pipeline step (OCR -> LLM), not here.
+    """Accepts the raw file directly (multipart), rather than a
+    pre-encrypted blob — see app/services/crypto.py for why: the server
+    needs plaintext briefly to run extraction, then encrypts before
+    anything is written to disk.
     """
+    raw_bytes = await file.read()
+
+    # 1. Extract text (Docling — handles PDF and scanned images alike)
+    try:
+        raw_text = extraction.extract_text(raw_bytes, file.filename)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not read document: {e}")
+
+    # 2. Plain-language explanation (Groq)
+    plain_explanation = explain.explain_document(raw_text) if raw_text.strip() else None
+
+    # 3. Encrypt and persist to disk — plaintext bytes are discarded after this
+    ciphertext, iv_b64, tag_b64 = crypto.encrypt_bytes(raw_bytes)
+    doc_id = uuid.uuid4()
+    file_path = STORAGE_DIR / f"{doc_id}.enc"
+    file_path.write_bytes(ciphertext)
+
+    # 4. Store metadata + extraction result
     doc = models.Document(
+        id=doc_id,
         patient_id=user.id,
-        doc_type=models.DocumentType(payload.doc_type),
-        file_url=payload.file_url,
-        iv=payload.iv,
-        auth_tag=payload.auth_tag,
-        original_filename=payload.original_filename,
+        doc_type=models.DocumentType(doc_type),
+        file_url=str(file_path),
+        iv=iv_b64,
+        auth_tag=tag_b64,
+        original_filename=file.filename,
     )
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
+    extraction_row = models.DocumentExtraction(
+        document_id=doc.id,
+        raw_text=raw_text,
+        plain_explanation=plain_explanation,
+    )
+    db.add(extraction_row)
+
     entry = models.TimelineEntry(
         patient_id=user.id,
         entry_type="document",
         ref_id=doc.id,
-        summary=f"Uploaded {payload.doc_type}: {payload.original_filename or 'document'}",
+        summary=f"Uploaded {doc_type}: {file.filename}",
     )
     db.add(entry)
     db.commit()
 
     return doc
+
+
+@router.get("/me/documents/{document_id}/explanation")
+def get_document_explanation(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    doc = db.get(models.Document, document_id)
+    if not doc or doc.patient_id != user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    row = db.execute(
+        select(models.DocumentExtraction).where(models.DocumentExtraction.document_id == document_id)
+    ).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="No extraction available for this document")
+
+    return {
+        "plain_explanation": row.plain_explanation,
+        "raw_text": row.raw_text,
+    }
 
 
 @router.post("/me/share", response_model=schemas.PermissionOut, status_code=201)
