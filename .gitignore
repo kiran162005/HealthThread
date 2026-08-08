@@ -14,6 +14,9 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 
+# Uploaded document storage (encrypted blobs — not source, shouldn't be in git)
+backend/storage/
+
 # Editor / OS
 .vscode/
 .idea/
