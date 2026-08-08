@@ -160,6 +160,35 @@ def grant_access(
     security.record_audit_event(db, user.id, user.id, "grant_access", doctor.id)
     return perm
 
+@router.delete("/me/documents/{document_id}", status_code=204)
+def delete_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    doc = db.get(models.Document, document_id)
+    if not doc or doc.patient_id != user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # Remove the encrypted file from disk first — if this fails, we haven't
+    # touched the DB yet, so nothing is left inconsistent.
+    file_path = Path(doc.file_url)
+    if file_path.exists():
+        file_path.unlink()
+
+    db.execute(
+        models.DocumentExtraction.__table__.delete().where(
+            models.DocumentExtraction.document_id == document_id
+        )
+    )
+    db.execute(
+        models.TimelineEntry.__table__.delete().where(
+            models.TimelineEntry.ref_id == document_id
+        )
+    )
+    db.delete(doc)
+    security.record_audit_event(db, user.id, user.id, "delete_document", document_id)
+    db.commit()
 
 @router.delete("/me/share/{doctor_id}", status_code=204)
 def revoke_access(

@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
 import api from "../api.js";
+import Header from "../components/Header.jsx";
+
+function initials(name) {
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState(null);
 
   useEffect(() => {
+    api.get("/auth/me").then((res) => setMe(res.data));
     api
       .get("/doctors/me/patients")
       .then((res) => setPatients(res.data))
@@ -13,22 +25,49 @@ export default function DoctorDashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <h1 className="text-2xl font-semibold text-slate-800 mb-6">My Patients</h1>
+    <div className="min-h-screen bg-page">
+      <Header name={me?.full_name} role="doctor" />
 
-      {loading && <p className="text-slate-500">Loading…</p>}
-      {!loading && patients.length === 0 && (
-        <p className="text-slate-500">No patients have shared access with you yet.</p>
-      )}
+      <main className="max-w-2xl mx-auto px-6 py-10">
+        <h1 className="font-display text-2xl text-ink mb-1">My Patients</h1>
+        <p className="text-sm text-ink/50 mb-8">
+          Patients who've shared timeline access with you.
+        </p>
 
-      <ul className="space-y-3">
-        {patients.map((p) => (
-          <li key={p.id} className="bg-white rounded-lg shadow-sm p-4 border border-slate-100">
-            <p className="text-slate-800 font-medium">{p.full_name}</p>
-            <p className="text-sm text-slate-400">{p.email}</p>
-          </li>
-        ))}
-      </ul>
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-ink/40 py-8">
+            <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            Loading your patients…
+          </div>
+        )}
+
+        {!loading && patients.length === 0 && (
+          <div className="text-center py-16 border border-dashed border-line rounded-2xl">
+            <p className="text-ink/50 text-sm">
+              No patients have shared access with you yet.
+            </p>
+          </div>
+        )}
+
+        {!loading && patients.length > 0 && (
+          <ul className="space-y-2">
+            {patients.map((p) => (
+              <li
+                key={p.id}
+                className="bg-white border border-line rounded-xl px-4 py-3 shadow-sm flex items-center gap-3"
+              >
+                <span className="w-9 h-9 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center shrink-0">
+                  {initials(p.full_name)}
+                </span>
+                <div>
+                  <p className="text-sm text-ink font-medium">{p.full_name}</p>
+                  <p className="text-xs text-ink/40 font-mono">{p.email}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
     </div>
   );
 }
