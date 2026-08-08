@@ -51,7 +51,16 @@ async def upload_document(
         raise HTTPException(status_code=422, detail=f"Could not read document: {e}")
 
     # 2. Plain-language explanation (Groq)
-    plain_explanation = explain.explain_document(raw_text) if raw_text.strip() else None
+    if not raw_text.strip():
+        plain_explanation = None
+    elif not explain.is_medical_document(raw_text):
+        plain_explanation = (
+            "This document doesn't look like a medical report or prescription, "
+            "so no explanation was generated. If this seems wrong, try re-uploading "
+            "a clearer copy."
+        )
+    else:
+        plain_explanation = explain.explain_document(raw_text)
 
     # 3. Encrypt and persist to disk — plaintext bytes are discarded after this
     ciphertext, iv_b64, tag_b64 = crypto.encrypt_bytes(raw_bytes)
