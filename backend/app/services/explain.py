@@ -23,6 +23,7 @@ Rules you must follow:
   gloss next to it.
 """
 
+
 def is_medical_document(raw_text: str) -> bool:
     """Cheap gate before spending a full explanation call — classifies
     whether the extracted text looks like a medical document at all
@@ -50,6 +51,33 @@ def is_medical_document(raw_text: str) -> bool:
     return response.choices[0].message.content.strip().upper().startswith("MEDICAL")
 
 
+_ASK_SYSTEM_PROMPT = """You answer a patient's follow-up question about a
+medical document that has already been explained to them.
+
+Rules you must follow:
+- Answer only using information present in the document text you're given.
+  If the answer isn't in the document, say so plainly rather than guessing.
+- Never diagnose, never say "you have X," never tell the patient to start,
+  stop, or change a medication.
+- If the question is really asking for medical advice ("should I be
+  worried," "what should I do"), gently redirect: explain what the
+  document itself says, then suggest discussing next steps with their
+  doctor — don't make the call yourself.
+- Keep the answer under 120 words.
+"""
+
+
+def ask_about_document(raw_text: str, question: str) -> str:
+    response = _client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": _ASK_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Document:\n{raw_text}\n\nQuestion: {question}"},
+        ],
+        temperature=0.3,
+        max_tokens=300,
+    )
+    return response.choices[0].message.content
 
 
 def explain_document(raw_text: str) -> str:

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api.js";
 import Header from "../components/Header.jsx";
+import DocumentExplanation from "../components/DocumentExplanation.jsx";
 
 const ENTRY_LABELS = {
   document: "Document",
@@ -20,7 +21,10 @@ export default function PatientDashboard() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
-  // explanation panel state, keyed by document id
+  // shown immediately after a successful upload, before it settles into the timeline
+  const [justUploadedId, setJustUploadedId] = useState(null);
+
+  // explanation panel state for timeline entries, keyed by document id
   const [expandedId, setExpandedId] = useState(null);
   const [explanations, setExplanations] = useState({}); // { [docId]: { loading, text, error } }
 
@@ -37,27 +41,7 @@ export default function PatientDashboard() {
     loadTimeline();
   }, []);
 
-  async function handleDelete(entry) {
-    if (!window.confirm("Delete this document? This can't be undone.")) return;
-    try {
-      await api.delete(`/patients/me/documents/${entry.ref_id}`);
-      loadTimeline();
-    } catch (err) {
-      alert(err.response?.data?.detail || "Could not delete this document.");
-    }
-  }
-
-  async function toggleExplanation(entry) {
-    const docId = entry.ref_id;
-
-    if (expandedId === docId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(docId);
-
-    if (explanations[docId]) return; // already fetched
-
+  async function fetchExplanation(docId) {
     setExplanations((prev) => ({ ...prev, [docId]: { loading: true } }));
     try {
       const res = await api.get(`/patients/me/documents/${docId}/explanation`);
@@ -73,6 +57,26 @@ export default function PatientDashboard() {
     }
   }
 
+  async function toggleExplanation(entry) {
+    const docId = entry.ref_id;
+    if (expandedId === docId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(docId);
+    if (!explanations[docId]) fetchExplanation(docId);
+  }
+
+  async function handleDelete(entry) {
+    if (!window.confirm("Delete this document? This can't be undone.")) return;
+    try {
+      await api.delete(`/patients/me/documents/${entry.ref_id}`);
+      loadTimeline();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Could not delete this document.");
+    }
+  }
+
   async function handleUpload(e) {
     e.preventDefault();
     if (!file) return;
@@ -84,12 +88,17 @@ export default function PatientDashboard() {
     formData.append("file", file);
 
     try {
-      await api.post("/patients/me/documents", formData, {
+      const res = await api.post("/patients/me/documents", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setFile(null);
       setShowUpload(false);
       loadTimeline();
+
+      // show the explanation right away instead of making them find it in the timeline
+      const newDocId = res.data.id;
+      setJustUploadedId(newDocId);
+      fetchExplanation(newDocId);
     } catch (err) {
       setUploadError(err.response?.data?.detail || "Upload failed — try again.");
     } finally {
@@ -167,6 +176,19 @@ export default function PatientDashboard() {
           </form>
         )}
 
+        {justUploadedId && (
+          <div className="bg-white border-2 border-primary/20 rounded-2xl p-6 mb-8">
+            <p className="text-xs font-mono uppercase tracking-wide text-primary/70 mb-3">
+              Just uploaded
+            </p>
+            <DocumentExplanation
+              documentId={justUploadedId}
+              explanation={explanations[justUploadedId]}
+              onClose={() => setJustUploadedId(null)}
+            />
+          </div>
+        )}
+
         {loading && (
           <div className="flex items-center gap-2 text-sm text-ink/40 py-8">
             <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -184,13 +206,11 @@ export default function PatientDashboard() {
 
         {!loading && entries.length > 0 && (
           <ol className="relative">
-            {/* the pulse rail */}
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-line" />
 
             {entries.map((e) => {
               const isDoc = e.entry_type === "document";
               const isExpanded = expandedId === e.ref_id;
-              const explanation = explanations[e.ref_id];
 
               return (
                 <li key={e.id} className="relative pl-8 pb-7 last:pb-0">
@@ -239,16 +259,11 @@ export default function PatientDashboard() {
                     </div>
 
                     {isDoc && isExpanded && (
-                      <div className="px-4 py-3 bg-page/50 border-t border-line text-sm text-ink/80 leading-relaxed">
-                        {explanation?.loading && (
-                          <span className="text-ink/40">Loading explanation…</span>
-                        )}
-                        {explanation?.error && (
-                          <span className="text-red-600">{explanation.error}</span>
-                        )}
-                        {explanation?.text && (
-                          <p className="whitespace-pre-line">{explanation.text}</p>
-                        )}
+                      <div className="px-4 py-3 bg-page/50 border-t border-line">
+                        <DocumentExplanation
+                          documentId={e.ref_id}
+                          explanation={explanations[e.ref_id]}
+                        />
                       </div>
                     )}
                   </div>

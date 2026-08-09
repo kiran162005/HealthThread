@@ -70,6 +70,10 @@ class DocumentOut(BaseModel):
         from_attributes = True
 
 
+class AskQuestionRequest(BaseModel):
+    question: str
+
+
 # ── Permissions / sharing ──────────────────────────────────────
 class GrantAccessRequest(BaseModel):
     doctor_email: EmailStr
