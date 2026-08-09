@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import api from "../api.js";
 import Header from "../components/Header.jsx";
 import DocumentExplanation from "../components/DocumentExplanation.jsx";
+import ShareAccessPanel from "../components/ShareAccessPanel.jsx";
+import SecurityLogPanel from "../components/SecurityLogPanel.jsx";
 
 const ENTRY_LABELS = {
   document: "Document",
@@ -16,6 +18,8 @@ export default function PatientDashboard() {
   const [me, setMe] = useState(null);
 
   const [showUpload, setShowUpload] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const [showSecurityLog, setShowSecurityLog] = useState(false);
   const [docType, setDocType] = useState("report");
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -118,13 +122,30 @@ export default function PatientDashboard() {
               Every report, note, and check-in, in one place.
             </p>
           </div>
-          <button
-            onClick={() => setShowUpload((s) => !s)}
-            className="shrink-0 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-4 py-2 transition"
-          >
-            {showUpload ? "Cancel" : "+ Upload document"}
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => { setShowShare((s) => !s); setShowSecurityLog(false); setShowUpload(false); }}
+              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+            >
+              Share Access
+            </button>
+            <button
+              onClick={() => { setShowSecurityLog((s) => !s); setShowShare(false); setShowUpload(false); }}
+              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+            >
+              Security Log
+            </button>
+            <button
+              onClick={() => { setShowUpload((s) => !s); setShowShare(false); setShowSecurityLog(false); }}
+              className="bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-4 py-2 transition"
+            >
+              {showUpload ? "Cancel" : "+ Upload document"}
+            </button>
+          </div>
         </div>
+
+        {showShare && <ShareAccessPanel onClose={() => setShowShare(false)} />}
+        {showSecurityLog && <SecurityLogPanel onClose={() => setShowSecurityLog(false)} />}
 
         {showUpload && (
           <form

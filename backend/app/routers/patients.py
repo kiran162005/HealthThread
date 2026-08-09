@@ -213,6 +213,30 @@ def grant_access(
     return perm
 
 
+@router.get("/me/share")
+def list_my_shares(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    rows = db.execute(
+        select(models.Permission, models.User)
+        .join(models.User, models.User.id == models.Permission.doctor_id)
+        .where(
+            models.Permission.patient_id == user.id,
+            models.Permission.status == models.PermissionStatus.active,
+        )
+    ).all()
+    return [
+        {
+            "doctor_id": doctor.id,
+            "doctor_name": doctor.full_name,
+            "doctor_email": doctor.email,
+            "granted_at": perm.granted_at,
+        }
+        for perm, doctor in rows
+    ]
+
+
 @router.delete("/me/share/{doctor_id}", status_code=204)
 def revoke_access(
     doctor_id: uuid.UUID,
@@ -241,17 +265,18 @@ def get_my_audit_log(
     user: models.User = Depends(require_patient),
 ):
     """Patient-visible 'who accessed your data, and when' view."""
-    entries = db.execute(
-        select(models.AuditLog)
+    rows = db.execute(
+        select(models.AuditLog, models.User)
+        .join(models.User, models.User.id == models.AuditLog.actor_id)
         .where(models.AuditLog.patient_id == user.id)
         .order_by(models.AuditLog.occurred_at.desc())
-    ).scalars().all()
+    ).all()
     return [
         {
-            "actor_id": e.actor_id,
-            "action": e.action,
-            "occurred_at": e.occurred_at,
-            "resource_id": e.resource_id,
+            "actor_name": actor.full_name,
+            "actor_role": actor.role.value,
+            "action": entry.action,
+            "occurred_at": entry.occurred_at,
         }
-        for e in entries
+        for entry, actor in rows
     ]
