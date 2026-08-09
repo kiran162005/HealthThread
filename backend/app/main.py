@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import auth, patients, doctors
+from app.routers import auth, patients, doctors, symptom
 
 # In early development this creates tables directly from the models.
 # Once the schema stabilizes, switch to Alembic migrations (schema.sql
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(patients.router)
 app.include_router(doctors.router)
+app.include_router(symptom.router)
 
 
 @app.get("/health")

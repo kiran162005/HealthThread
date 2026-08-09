@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app import models, schemas, auth, security
-from app.services import crypto, extraction, explain
+from app.services import crypto, extraction, explain, embeddings, retrieval
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 require_patient = auth.require_role("patient")
@@ -89,6 +89,21 @@ async def upload_document(
     )
     db.add(extraction_row)
 
+    # 5. Chunk + embed for retrieval — this is what the RAG
+    # symptom-reasoning agent will search over later.
+    if raw_text.strip():
+        chunks = embeddings.chunk_text(raw_text)
+        if chunks:
+            vectors = embeddings.embed_chunks(chunks)
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                db.add(models.DocumentChunk(
+                    document_id=doc.id,
+                    patient_id=user.id,
+                    chunk_index=i,
+                    chunk_text=chunk,
+                    embedding=vector,
+                ))
+
     entry = models.TimelineEntry(
         patient_id=user.id,
         entry_type="document",
@@ -166,6 +181,11 @@ def delete_document(
         )
     )
     db.execute(
+        models.DocumentChunk.__table__.delete().where(
+            models.DocumentChunk.document_id == document_id
+        )
+    )
+    db.execute(
         models.TimelineEntry.__table__.delete().where(
             models.TimelineEntry.ref_id == document_id
         )
@@ -173,6 +193,18 @@ def delete_document(
     db.delete(doc)
     security.record_audit_event(db, user.id, user.id, "delete_document", document_id)
     db.commit()
+
+
+@router.get("/me/retrieve-test")
+def retrieve_test(
+    query: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    """Debug endpoint — confirms retrieval works before the full agent
+    is wired up. Not part of the final feature set.
+    """
+    return retrieval.retrieve_relevant_chunks(db, user.id, query)
 
 
 @router.post("/me/share", response_model=schemas.PermissionOut, status_code=201)
