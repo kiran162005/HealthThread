@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage.jsx";
 import PatientDashboard from "./pages/PatientDashboard.jsx";
+import SymptomChecker from "./pages/SymptomChecker.jsx";
 import DoctorDashboard from "./pages/DoctorDashboard.jsx";
 
 function getRole() {
@@ -23,6 +24,14 @@ export default function App() {
         element={
           <ProtectedRoute role="patient">
             <PatientDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patient/symptom-check"
+        element={
+          <ProtectedRoute role="patient">
+            <SymptomChecker />
           </ProtectedRoute>
         }
       />

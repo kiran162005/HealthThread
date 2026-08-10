@@ -165,10 +165,14 @@ def build_graph():
 _compiled_graph = None
 
 
-def run_symptom_check(db, patient_id: str, transcript: list[dict]) -> dict:
+def run_symptom_check(db, patient_id: str, transcript: list[dict], force_ready: bool = False) -> dict:
     """Runs one turn of the agent against the conversation so far.
     db is passed through state since LangGraph nodes don't take extra
     args directly — a bit unusual but keeps the graph signature simple.
+    force_ready lets the user skip straight to an answer instead of
+    another follow-up question — reuses the same round-cap path Triage
+    already has, since "stop asking, just answer with what you have" is
+    exactly what happens when the cap is hit.
     """
     global _compiled_graph
     if _compiled_graph is None:
@@ -176,6 +180,8 @@ def run_symptom_check(db, patient_id: str, transcript: list[dict]) -> dict:
 
     round_count = sum(1 for t in transcript if t["role"] == "patient") - 1  # first message doesn't count as a "round"
     round_count = max(round_count, 0)
+    if force_ready:
+        round_count = MAX_TRIAGE_ROUNDS
 
     initial_state: SymptomState = {
         "patient_id": patient_id,

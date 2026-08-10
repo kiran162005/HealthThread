@@ -15,6 +15,7 @@ require_patient = auth.require_role("patient")
 class SymptomCheckRequest(BaseModel):
     session_id: uuid.UUID | None = None
     message: str
+    force_ready: bool = False  # user chose "answer now" instead of another follow-up
 
 
 @router.post("/me/symptom-check")
@@ -35,7 +36,7 @@ def symptom_check(
 
     transcript.append({"role": "patient", "message": payload.message})
 
-    result = symptom_agent.run_symptom_check(db, str(user.id), transcript)
+    result = symptom_agent.run_symptom_check(db, str(user.id), transcript, force_ready=payload.force_ready)
 
     if result["status"] == "need_more_info":
         transcript.append({"role": "agent", "message": result["follow_up_question"]})
@@ -78,3 +79,22 @@ def symptom_check(
         "confidence": result["confidence"],
         "sources_used": len([c for c in result["retrieved_chunks"] if c["similarity"] > 0.25]),
     }
+
+
+@router.delete("/me/symptom-check/{session_id}", status_code=204)
+def delete_symptom_session(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    session = db.get(models.SymptomSession, session_id)
+    if not session or session.patient_id != user.id:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    db.execute(
+        models.TimelineEntry.__table__.delete().where(
+            models.TimelineEntry.ref_id == session_id
+        )
+    )
+    db.delete(session)
+    db.commit()

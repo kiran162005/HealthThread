@@ -195,18 +195,6 @@ def delete_document(
     db.commit()
 
 
-@router.get("/me/retrieve-test")
-def retrieve_test(
-    query: str,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(require_patient),
-):
-    """Debug endpoint — confirms retrieval works before the full agent
-    is wired up. Not part of the final feature set.
-    """
-    return retrieval.retrieve_relevant_chunks(db, user.id, query)
-
-
 @router.post("/me/share", response_model=schemas.PermissionOut, status_code=201)
 def grant_access(
     payload: schemas.GrantAccessRequest,

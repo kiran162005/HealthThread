@@ -4,6 +4,7 @@ import Header from "../components/Header.jsx";
 import DocumentExplanation from "../components/DocumentExplanation.jsx";
 import ShareAccessPanel from "../components/ShareAccessPanel.jsx";
 import SecurityLogPanel from "../components/SecurityLogPanel.jsx";
+import { useNavigate } from "react-router-dom";
 
 const ENTRY_LABELS = {
   document: "Document",
@@ -13,6 +14,7 @@ const ENTRY_LABELS = {
 };
 
 export default function PatientDashboard() {
+  const navigate = useNavigate();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState(null);
@@ -72,12 +74,17 @@ export default function PatientDashboard() {
   }
 
   async function handleDelete(entry) {
-    if (!window.confirm("Delete this document? This can't be undone.")) return;
+    const label = entry.entry_type === "symptom_check" ? "symptom check" : "document";
+    if (!window.confirm(`Delete this ${label}? This can't be undone.`)) return;
     try {
-      await api.delete(`/patients/me/documents/${entry.ref_id}`);
+      const path =
+        entry.entry_type === "symptom_check"
+          ? `/patients/me/symptom-check/${entry.ref_id}`
+          : `/patients/me/documents/${entry.ref_id}`;
+      await api.delete(path);
       loadTimeline();
     } catch (err) {
-      alert(err.response?.data?.detail || "Could not delete this document.");
+      alert(err.response?.data?.detail || `Could not delete this ${label}.`);
     }
   }
 
@@ -123,6 +130,12 @@ export default function PatientDashboard() {
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => navigate("/patient/symptom-check")}
+              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+            >
+              Symptom Checker
+            </button>
             <button
               onClick={() => { setShowShare((s) => !s); setShowSecurityLog(false); setShowUpload(false); }}
               className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
@@ -231,6 +244,8 @@ export default function PatientDashboard() {
 
             {entries.map((e) => {
               const isDoc = e.entry_type === "document";
+              const isSymptomCheck = e.entry_type === "symptom_check";
+              const isDeletable = isDoc || isSymptomCheck;
               const isExpanded = expandedId === e.ref_id;
 
               return (
@@ -256,7 +271,7 @@ export default function PatientDashboard() {
                               year: "numeric",
                             })}
                           </span>
-                          {isDoc && (
+                          {isDeletable && (
                             <button
                               onClick={(ev) => {
                                 ev.stopPropagation();
