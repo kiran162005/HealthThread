@@ -1,12 +1,15 @@
 import os
 import uuid
+import hashlib
+import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.database import get_db
+from pydantic import BaseModel
 from app import models, schemas, auth, security
 from app.services import crypto, extraction, explain, embeddings, retrieval
 
@@ -34,6 +37,7 @@ def get_my_timeline(
 async def upload_document(
     doc_type: str = Form(...),
     file: UploadFile = File(...),
+    save_to_records: bool = Form(False),
     db: Session = Depends(get_db),
     user: models.User = Depends(require_patient),
 ):
@@ -43,6 +47,17 @@ async def upload_document(
     anything is written to disk.
     """
     raw_bytes = await file.read()
+
+    # Duplicate check — before any expensive extraction/embedding work
+    content_hash = hashlib.sha256(raw_bytes).hexdigest()
+    existing = db.execute(
+        select(models.Document).where(
+            models.Document.patient_id == user.id,
+            models.Document.content_hash == content_hash,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="You've already uploaded this exact document")
 
     # 1. Extract text (Docling — handles PDF and scanned images alike)
     try:
@@ -77,6 +92,8 @@ async def upload_document(
         iv=iv_b64,
         auth_tag=tag_b64,
         original_filename=file.filename,
+        content_hash=content_hash,
+        saved_to_records=save_to_records,
     )
     db.add(doc)
     db.commit()
@@ -138,6 +155,32 @@ def get_document_explanation(
     }
 
 
+@router.get("/me/documents/{document_id}/file")
+def view_my_document_file(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    """The patient viewing their own document — the actual file, in its
+    original format, not the AI explanation.
+    """
+    doc = db.get(models.Document, document_id)
+    if not doc or doc.patient_id != user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    ciphertext = Path(doc.file_url).read_bytes()
+    plaintext = crypto.decrypt_bytes(ciphertext, doc.iv, doc.auth_tag)
+
+    media_type, _ = mimetypes.guess_type(doc.original_filename or "")
+    media_type = media_type or "application/octet-stream"
+
+    return Response(
+        content=plaintext,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{doc.original_filename or "document"}"'},
+    )
+
+
 @router.post("/me/documents/{document_id}/ask")
 def ask_about_document(
     document_id: uuid.UUID,
@@ -193,6 +236,141 @@ def delete_document(
     db.delete(doc)
     security.record_audit_event(db, user.id, user.id, "delete_document", document_id)
     db.commit()
+
+
+@router.get("/me/documents")
+def list_my_documents(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    """Medical Records folder view — every uploaded document, independent
+    of the chronological Timeline, plus who each one is currently shared
+    with.
+    """
+    docs = db.execute(
+        select(models.Document)
+        .where(
+            models.Document.patient_id == user.id,
+            models.Document.saved_to_records == True,  # noqa: E712
+        )
+        .order_by(models.Document.uploaded_at.desc())
+    ).scalars().all()
+
+    shares_by_doc: dict = {}
+    share_rows = db.execute(
+        select(models.DocumentShare, models.User)
+        .join(models.User, models.User.id == models.DocumentShare.doctor_id)
+        .where(models.DocumentShare.patient_id == user.id)
+    ).all()
+    for share, doctor in share_rows:
+        shares_by_doc.setdefault(share.document_id, []).append(
+            {"doctor_id": doctor.id, "doctor_name": doctor.full_name}
+        )
+
+    return [
+        {
+            "id": doc.id,
+            "doc_type": doc.doc_type.value,
+            "original_filename": doc.original_filename,
+            "uploaded_at": doc.uploaded_at,
+            "shared_with": shares_by_doc.get(doc.id, []),
+        }
+        for doc in docs
+    ]
+
+
+class ShareRecordsRequest(BaseModel):
+    doctor_id: uuid.UUID
+    document_ids: list[uuid.UUID] | None = None  # None/empty = share all
+    note: str | None = None
+
+
+@router.post("/me/share-records", status_code=201)
+def share_records(
+    payload: ShareRecordsRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    # Must already be a connected doctor (an active Permission) before
+    # documents can be shared with them.
+    perm = db.execute(
+        select(models.Permission).where(
+            models.Permission.patient_id == user.id,
+            models.Permission.doctor_id == payload.doctor_id,
+            models.Permission.status == models.PermissionStatus.active,
+        )
+    ).scalar_one_or_none()
+    if not perm:
+        raise HTTPException(status_code=403, detail="Grant this doctor access before sharing records")
+
+    if payload.document_ids:
+        doc_ids = payload.document_ids
+    else:
+        doc_ids = [
+            d.id for d in db.execute(
+                select(models.Document.id).where(models.Document.patient_id == user.id)
+            ).all()
+        ]
+
+    shared_count = 0
+    for doc_id in doc_ids:
+        existing = db.execute(
+            select(models.DocumentShare).where(
+                models.DocumentShare.document_id == doc_id,
+                models.DocumentShare.doctor_id == payload.doctor_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            existing.note = payload.note
+            continue
+        db.add(models.DocumentShare(
+            document_id=doc_id,
+            doctor_id=payload.doctor_id,
+            patient_id=user.id,
+            note=payload.note,
+        ))
+        shared_count += 1
+
+    security.record_audit_event(db, user.id, user.id, "share_records", payload.doctor_id)
+    db.commit()
+    return {"shared_count": shared_count}
+
+
+@router.delete("/me/documents/{document_id}/share/{doctor_id}", status_code=204)
+def unshare_document(
+    document_id: uuid.UUID,
+    doctor_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    share = db.execute(
+        select(models.DocumentShare).where(
+            models.DocumentShare.document_id == document_id,
+            models.DocumentShare.doctor_id == doctor_id,
+            models.DocumentShare.patient_id == user.id,
+        )
+    ).scalar_one_or_none()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+    db.delete(share)
+    security.record_audit_event(db, user.id, user.id, "unshare_document", document_id)
+    db.commit()
+
+
+@router.get("/me/notes", response_model=list[schemas.DoctorNoteOut])
+def list_my_notes(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    """Full note content — the Timeline only shows a short summary that
+    a note exists; this is how a patient actually reads what was written.
+    """
+    notes = db.execute(
+        select(models.DoctorNote)
+        .where(models.DoctorNote.patient_id == user.id)
+        .order_by(models.DoctorNote.created_at.desc())
+    ).scalars().all()
+    return notes
 
 
 @router.post("/me/share", response_model=schemas.PermissionOut, status_code=201)

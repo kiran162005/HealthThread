@@ -2,7 +2,9 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/LoginPage.jsx";
 import PatientDashboard from "./pages/PatientDashboard.jsx";
 import SymptomChecker from "./pages/SymptomChecker.jsx";
+import MedicalRecords from "./pages/MedicalRecords.jsx";
 import DoctorDashboard from "./pages/DoctorDashboard.jsx";
+import DoctorPatientView from "./pages/DoctorPatientView.jsx";
 
 function getRole() {
   return localStorage.getItem("role");
@@ -36,10 +38,26 @@ export default function App() {
         }
       />
       <Route
+        path="/patient/records"
+        element={
+          <ProtectedRoute role="patient">
+            <MedicalRecords />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/doctor"
         element={
           <ProtectedRoute role="doctor">
             <DoctorDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/doctor/patients/:patientId"
+        element={
+          <ProtectedRoute role="doctor">
+            <DoctorPatientView />
           </ProtectedRoute>
         }
       />

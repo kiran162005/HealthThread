@@ -1,0 +1,1 @@
+ALTER TABLE documents ADD COLUMN saved_to_records BOOLEAN NOT NULL DEFAULT false;

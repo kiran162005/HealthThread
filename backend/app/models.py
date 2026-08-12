@@ -90,7 +90,25 @@ class Document(Base):
     iv: Mapped[str] = mapped_column(Text, nullable=False)
     auth_tag: Mapped[str] = mapped_column(Text, nullable=False)
     original_filename: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    saved_to_records: Mapped[bool] = mapped_column(Boolean, default=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class DocumentShare(Base):
+    """Per-document sharing — separate from the doctor relationship
+    (Permission). A doctor can be connected without seeing anything;
+    documents only become visible once explicitly shared here.
+    """
+    __tablename__ = "document_shares"
+    __table_args__ = (UniqueConstraint("document_id", "doctor_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"))
+    doctor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    patient_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
 class DocumentExtraction(Base):

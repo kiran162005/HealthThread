@@ -26,6 +26,7 @@ export default function PatientDashboard() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [saveToRecords, setSaveToRecords] = useState(false);
 
   // shown immediately after a successful upload, before it settles into the timeline
   const [justUploadedId, setJustUploadedId] = useState(null);
@@ -33,6 +34,7 @@ export default function PatientDashboard() {
   // explanation panel state for timeline entries, keyed by document id
   const [expandedId, setExpandedId] = useState(null);
   const [explanations, setExplanations] = useState({}); // { [docId]: { loading, text, error } }
+  const [notesById, setNotesById] = useState(null); // fetched lazily on first note click
 
   function loadTimeline() {
     setLoading(true);
@@ -73,6 +75,20 @@ export default function PatientDashboard() {
     if (!explanations[docId]) fetchExplanation(docId);
   }
 
+  async function toggleNote(entry) {
+    if (expandedId === entry.ref_id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(entry.ref_id);
+    if (!notesById) {
+      const res = await api.get("/patients/me/notes");
+      const map = {};
+      res.data.forEach((n) => { map[n.id] = n; });
+      setNotesById(map);
+    }
+  }
+
   async function handleDelete(entry) {
     const label = entry.entry_type === "symptom_check" ? "symptom check" : "document";
     if (!window.confirm(`Delete this ${label}? This can't be undone.`)) return;
@@ -97,6 +113,7 @@ export default function PatientDashboard() {
     const formData = new FormData();
     formData.append("doc_type", docType);
     formData.append("file", file);
+    formData.append("save_to_records", saveToRecords);
 
     try {
       const res = await api.post("/patients/me/documents", formData, {
@@ -104,6 +121,7 @@ export default function PatientDashboard() {
       });
       setFile(null);
       setShowUpload(false);
+      setSaveToRecords(false);
       loadTimeline();
 
       // show the explanation right away instead of making them find it in the timeline
@@ -131,6 +149,12 @@ export default function PatientDashboard() {
           </div>
           <div className="flex gap-2 shrink-0">
             <button
+              onClick={() => navigate("/patient/records")}
+              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+            >
+              Medical Records
+            </button>
+            <button
               onClick={() => navigate("/patient/symptom-check")}
               className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
             >
@@ -152,7 +176,7 @@ export default function PatientDashboard() {
               onClick={() => { setShowUpload((s) => !s); setShowShare(false); setShowSecurityLog(false); }}
               className="bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-4 py-2 transition"
             >
-              {showUpload ? "Cancel" : "+ Upload document"}
+              {showUpload ? "Cancel" : "Explain a Document"}
             </button>
           </div>
         </div>
@@ -165,6 +189,9 @@ export default function PatientDashboard() {
             onSubmit={handleUpload}
             className="bg-white border border-line rounded-2xl p-6 mb-8 space-y-4"
           >
+            <p className="text-xs text-ink/40 -mt-1">
+              Quick look — get an explanation and ask follow-ups. Won't appear in Medical Records unless you choose to save it below.
+            </p>
             <div>
               <label className="block text-xs font-medium text-ink/60 mb-1.5">Document type</label>
               <select
@@ -188,6 +215,16 @@ export default function PatientDashboard() {
                 required
               />
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-ink/70">
+              <input
+                type="checkbox"
+                checked={saveToRecords}
+                onChange={(e) => setSaveToRecords(e.target.checked)}
+                className="accent-primary"
+              />
+              Also save this to Medical Records
+            </label>
 
             {uploadError && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
@@ -245,7 +282,9 @@ export default function PatientDashboard() {
             {entries.map((e) => {
               const isDoc = e.entry_type === "document";
               const isSymptomCheck = e.entry_type === "symptom_check";
+              const isNote = e.entry_type === "doctor_note";
               const isDeletable = isDoc || isSymptomCheck;
+              const isClickable = isDoc || isNote;
               const isExpanded = expandedId === e.ref_id;
 
               return (
@@ -256,8 +295,8 @@ export default function PatientDashboard() {
 
                   <div className="bg-white border border-line rounded-xl overflow-hidden shadow-sm">
                     <div
-                      className={`px-4 py-3 ${isDoc ? "cursor-pointer hover:bg-page/60" : ""} transition`}
-                      onClick={isDoc ? () => toggleExplanation(e) : undefined}
+                      className={`px-4 py-3 ${isClickable ? "cursor-pointer hover:bg-page/60" : ""} transition`}
+                      onClick={isDoc ? () => toggleExplanation(e) : isNote ? () => toggleNote(e) : undefined}
                     >
                       <div className="flex items-center justify-between gap-3 mb-1">
                         <span className="text-[11px] font-mono uppercase tracking-wide text-primary/70">
@@ -291,6 +330,11 @@ export default function PatientDashboard() {
                             {isExpanded ? "Hide explanation ▲" : "View explanation ▾"}
                           </span>
                         )}
+                        {isNote && (
+                          <span className="text-xs text-primary/60 shrink-0">
+                            {isExpanded ? "Hide note ▲" : "Read note ▾"}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -300,6 +344,11 @@ export default function PatientDashboard() {
                           documentId={e.ref_id}
                           explanation={explanations[e.ref_id]}
                         />
+                      </div>
+                    )}
+                    {isNote && isExpanded && (
+                      <div className="px-4 py-3 bg-page/50 border-t border-line text-sm text-ink/80">
+                        {notesById ? (notesById[e.ref_id]?.note || "Note not found.") : "Loading…"}
                       </div>
                     )}
                   </div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import api from "../api.js";
 
-export default function DocumentExplanation({ documentId, explanation, onClose }) {
+export default function DocumentExplanation({ documentId, explanation, onClose, readOnly = false }) {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [qa, setQa] = useState([]); // [{ question, answer }]
@@ -45,21 +45,23 @@ export default function DocumentExplanation({ documentId, explanation, onClose }
             </div>
           )}
 
-          <form onSubmit={handleAsk} className="flex gap-2">
-            <input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a follow-up about this document…"
-              className="flex-1 border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
-            />
-            <button
-              type="submit"
-              disabled={asking || !question.trim()}
-              className="bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-3 py-1.5 transition disabled:opacity-50 shrink-0"
-            >
-              {asking ? "Asking…" : "Ask"}
-            </button>
-          </form>
+          {!readOnly && (
+            <form onSubmit={handleAsk} className="flex gap-2">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask a follow-up about this document…"
+                className="flex-1 border border-line rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+              />
+              <button
+                type="submit"
+                disabled={asking || !question.trim()}
+                className="bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-3 py-1.5 transition disabled:opacity-50 shrink-0"
+              >
+                {asking ? "Asking…" : "Ask"}
+              </button>
+            </form>
+          )}
 
           {onClose && (
             <button

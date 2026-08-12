@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api.js";
 import Header from "../components/Header.jsx";
 
@@ -15,6 +16,7 @@ export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.get("/auth/me").then((res) => setMe(res.data));
@@ -54,15 +56,17 @@ export default function DoctorDashboard() {
             {patients.map((p) => (
               <li
                 key={p.id}
-                className="bg-white border border-line rounded-xl px-4 py-3 shadow-sm flex items-center gap-3"
+                onClick={() => navigate(`/doctor/patients/${p.id}`)}
+                className="bg-white border border-line hover:border-primary/40 hover:shadow-sm rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer transition"
               >
                 <span className="w-9 h-9 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center shrink-0">
                   {initials(p.full_name)}
                 </span>
-                <div>
+                <div className="flex-1">
                   <p className="text-sm text-ink font-medium">{p.full_name}</p>
                   <p className="text-xs text-ink/40 font-mono">{p.email}</p>
                 </div>
+                <span className="text-ink/25">→</span>
               </li>
             ))}
           </ul>

@@ -41,12 +41,15 @@ export default function ShareAccessPanel({ onClose }) {
 
   return (
     <div className="bg-white border border-line rounded-2xl p-6 mb-8">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="font-display text-lg text-ink">Share Access</h2>
         <button onClick={onClose} className="text-xs text-ink/40 hover:text-primary transition">
           Close
         </button>
       </div>
+      <p className="text-xs text-ink/40 mb-4">
+        Connecting a doctor here doesn't share anything by itself — choose specific records to share from Medical Records afterward.
+      </p>
 
       <form onSubmit={handleGrant} className="flex gap-2 mb-5">
         <input
