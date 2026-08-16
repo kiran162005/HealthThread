@@ -5,6 +5,7 @@ import SymptomChecker from "./pages/SymptomChecker.jsx";
 import MedicalRecords from "./pages/MedicalRecords.jsx";
 import DoctorDashboard from "./pages/DoctorDashboard.jsx";
 import DoctorPatientView from "./pages/DoctorPatientView.jsx";
+import SkinCheck from "./pages/SkinCheck.jsx";
 
 function getRole() {
   return localStorage.getItem("role");
@@ -34,6 +35,14 @@ export default function App() {
         element={
           <ProtectedRoute role="patient">
             <SymptomChecker />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patient/skin-check"
+        element={
+          <ProtectedRoute role="patient">
+            <SkinCheck />
           </ProtectedRoute>
         }
       />

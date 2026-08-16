@@ -167,6 +167,12 @@ export default function PatientDashboard() {
               Share Access
             </button>
             <button
+              onClick={() => navigate("/patient/skin-check")}
+              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+            >
+              Skin Check
+            </button>
+            <button
               onClick={() => { setShowSecurityLog((s) => !s); setShowShare(false); setShowUpload(false); }}
               className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
             >
