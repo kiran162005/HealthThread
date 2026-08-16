@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.database import get_db
 from pydantic import BaseModel
 from app import models, schemas, auth, security
-from app.services import crypto, extraction, explain, embeddings, retrieval
+from app.services import crypto, extraction, explain, embeddings, retrieval, skin_classifier
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 require_patient = auth.require_role("patient")
@@ -201,6 +201,25 @@ def ask_about_document(
     answer = explain.ask_about_document(row.raw_text, payload.question)
     return {"answer": answer}
 
+@router.post("/me/skin-check")
+async def skin_check(
+    file: UploadFile = File(...),
+    user: models.User = Depends(require_patient),
+):
+    """Standalone skin lesion classification — not stored as a Document.
+    A photo isn't something Docling extraction applies to, and this is
+    a quick experimental read rather than a record worth keeping in the
+    patient's timeline. See app/services/skin_classifier.py for the
+    model itself and its accuracy caveats.
+    """
+    raw_bytes = await file.read()
+    try:
+        result = skin_classifier.classify_image(raw_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return result
 
 @router.delete("/me/documents/{document_id}", status_code=204)
 def delete_document(
