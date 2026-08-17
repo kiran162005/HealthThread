@@ -16,6 +16,7 @@ frontend/dist/
 
 # Uploaded document storage (encrypted blobs — not source, shouldn't be in git)
 backend/storage/
+backend/ml_models/*.pth
 
 # Editor / OS
 .vscode/
