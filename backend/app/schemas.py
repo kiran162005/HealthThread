@@ -29,7 +29,16 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class DoctorPatientSummaryOut(UserOut):
+    """UserOut plus at-a-glance stats for the doctor's patient list —
+    what's shared, how much, and what's new since the doctor's last
+    visit to that patient's timeline.
+    """
+    shared_document_count: int
+    last_activity_at: Optional[datetime]
+    new_items_count: int
 
+    
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
