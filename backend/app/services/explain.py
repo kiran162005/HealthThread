@@ -32,7 +32,7 @@ def is_medical_document(raw_text: str) -> bool:
     an eviction notice or invoice as if it were a health document.
     """
     response = _client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-20b",
         messages=[
             {
                 "role": "system",
@@ -69,7 +69,7 @@ Rules you must follow:
 
 def ask_about_document(raw_text: str, question: str) -> str:
     response = _client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-20b",
         messages=[
             {"role": "system", "content": _ASK_SYSTEM_PROMPT},
             {"role": "user", "content": f"Document:\n{raw_text}\n\nQuestion: {question}"},
@@ -82,7 +82,7 @@ def ask_about_document(raw_text: str, question: str) -> str:
 
 def explain_document(raw_text: str) -> str:
     response = _client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-20b",
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"Explain this document:\n\n{raw_text}"},
