@@ -3,7 +3,7 @@ import mimetypes
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.database import get_db
 from app import models, schemas, auth, security
@@ -25,20 +25,73 @@ def _assert_active_permission(db: Session, doctor_id: uuid.UUID, patient_id: uui
         raise HTTPException(status_code=403, detail="No active access to this patient")
 
 
-@router.get("/me/patients", response_model=list[schemas.UserOut])
+@router.get("/me/patients", response_model=list[schemas.DoctorPatientSummaryOut])
 def list_my_patients(
     db: Session = Depends(get_db),
     user: models.User = Depends(require_doctor),
 ):
-    rows = db.execute(
-        select(models.User)
-        .join(models.Permission, models.Permission.patient_id == models.User.id)
+    """Patient list with at-a-glance stats: how many documents this
+    doctor has been shared, when something last happened, and how many
+    shared documents are new since the doctor's last visit to that
+    patient's timeline (derived from the audit log's view_timeline
+    events — no separate "read" tracking table needed).
+    """
+    perms = db.execute(
+        select(models.Permission, models.User)
+        .join(models.User, models.User.id == models.Permission.patient_id)
         .where(
             models.Permission.doctor_id == user.id,
             models.Permission.status == models.PermissionStatus.active,
         )
-    ).scalars().all()
-    return rows
+    ).all()
+
+    summaries = []
+    for perm, patient in perms:
+        shared_docs = db.execute(
+            select(models.DocumentShare).where(
+                models.DocumentShare.doctor_id == user.id,
+                models.DocumentShare.patient_id == patient.id,
+            )
+        ).scalars().all()
+
+        last_note_at = db.execute(
+            select(func.max(models.DoctorNote.created_at)).where(
+                models.DoctorNote.doctor_id == user.id,
+                models.DoctorNote.patient_id == patient.id,
+            )
+        ).scalar_one()
+
+        last_viewed_at = db.execute(
+            select(func.max(models.AuditLog.occurred_at)).where(
+                models.AuditLog.actor_id == user.id,
+                models.AuditLog.patient_id == patient.id,
+                models.AuditLog.action == "view_timeline",
+            )
+        ).scalar_one()
+
+        activity_dates = [d.shared_at for d in shared_docs]
+        if last_note_at:
+            activity_dates.append(last_note_at)
+        last_activity_at = max(activity_dates) if activity_dates else perm.granted_at
+
+        if last_viewed_at:
+            new_items_count = sum(1 for d in shared_docs if d.shared_at > last_viewed_at)
+        else:
+            new_items_count = len(shared_docs)
+
+        summaries.append(schemas.DoctorPatientSummaryOut(
+            id=patient.id,
+            email=patient.email,
+            full_name=patient.full_name,
+            role=patient.role,
+            is_verified=patient.is_verified,
+            shared_document_count=len(shared_docs),
+            last_activity_at=last_activity_at,
+            new_items_count=new_items_count,
+        ))
+
+    summaries.sort(key=lambda s: s.last_activity_at, reverse=True)
+    return summaries
 
 
 @router.get("/me/patients/{patient_id}/timeline", response_model=list[schemas.TimelineEntryOut])
