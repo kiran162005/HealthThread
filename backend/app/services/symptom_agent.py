@@ -65,7 +65,7 @@ def triage_node(state: SymptomState) -> SymptomState:
 
     convo = "\n".join(f'{t["role"]}: {t["message"]}' for t in state["transcript"])
     response = _client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-20b",
         messages=[
             {"role": "system", "content": _TRIAGE_SYSTEM_PROMPT},
             {"role": "user", "content": convo},
@@ -121,7 +121,7 @@ def reason_node(state: SymptomState) -> SymptomState:
         history_text = "(No closely related history found for these symptoms.)"
 
     response = _client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="openai/gpt-oss-20b",
         messages=[
             {"role": "system", "content": _REASONING_SYSTEM_PROMPT},
             {
