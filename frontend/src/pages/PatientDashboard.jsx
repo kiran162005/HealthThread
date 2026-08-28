@@ -5,18 +5,51 @@ import DocumentExplanation from "../components/DocumentExplanation.jsx";
 import ShareAccessPanel from "../components/ShareAccessPanel.jsx";
 import SecurityLogPanel from "../components/SecurityLogPanel.jsx";
 import { useNavigate } from "react-router-dom";
+import {
+  FileText,
+  Stethoscope,
+  ScanLine,
+  Share2,
+  ShieldCheck,
+  Upload,
+  X,
+  History,
+  ArrowRight,
+} from "lucide-react";
 
-const ENTRY_LABELS = {
-  document: "Document",
-  symptom_check: "Symptom Check",
-  doctor_note: "Doctor's Note",
-  skin_check: "Skin Check",
-};
+const QUICK_ACTIONS = [
+  {
+    key: "timeline",
+    icon: History,
+    label: "Timeline",
+    desc: "Your full history, in order",
+    path: "/patient/timeline",
+  },
+  {
+    key: "records",
+    icon: FileText,
+    label: "Medical Records",
+    desc: "Everything you've saved",
+    path: "/patient/records",
+  },
+  {
+    key: "symptom",
+    icon: Stethoscope,
+    label: "Symptom Checker",
+    desc: "Grounded in your history",
+    path: "/patient/symptom-check",
+  },
+  {
+    key: "skin",
+    icon: ScanLine,
+    label: "Skin Check",
+    desc: "Upload a photo, get a read",
+    path: "/patient/skin-check",
+  },
+];
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [me, setMe] = useState(null);
 
   const [showUpload, setShowUpload] = useState(false);
@@ -28,25 +61,11 @@ export default function PatientDashboard() {
   const [uploadError, setUploadError] = useState("");
   const [saveToRecords, setSaveToRecords] = useState(false);
 
-  // shown immediately after a successful upload, before it settles into the timeline
   const [justUploadedId, setJustUploadedId] = useState(null);
-
-  // explanation panel state for timeline entries, keyed by document id
-  const [expandedId, setExpandedId] = useState(null);
-  const [explanations, setExplanations] = useState({}); // { [docId]: { loading, text, error } }
-  const [notesById, setNotesById] = useState(null); // fetched lazily on first note click
-
-  function loadTimeline() {
-    setLoading(true);
-    api
-      .get("/patients/me/timeline")
-      .then((res) => setEntries(res.data))
-      .finally(() => setLoading(false));
-  }
+  const [explanations, setExplanations] = useState({});
 
   useEffect(() => {
     api.get("/auth/me").then((res) => setMe(res.data));
-    loadTimeline();
   }, []);
 
   async function fetchExplanation(docId) {
@@ -62,45 +81,6 @@ export default function PatientDashboard() {
         ...prev,
         [docId]: { loading: false, error: err.response?.data?.detail || "Could not load explanation." },
       }));
-    }
-  }
-
-  async function toggleExplanation(entry) {
-    const docId = entry.ref_id;
-    if (expandedId === docId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(docId);
-    if (!explanations[docId]) fetchExplanation(docId);
-  }
-
-  async function toggleNote(entry) {
-    if (expandedId === entry.ref_id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(entry.ref_id);
-    if (!notesById) {
-      const res = await api.get("/patients/me/notes");
-      const map = {};
-      res.data.forEach((n) => { map[n.id] = n; });
-      setNotesById(map);
-    }
-  }
-
-  async function handleDelete(entry) {
-    const label = entry.entry_type === "symptom_check" ? "symptom check" : "document";
-    if (!window.confirm(`Delete this ${label}? This can't be undone.`)) return;
-    try {
-      const path =
-        entry.entry_type === "symptom_check"
-          ? `/patients/me/symptom-check/${entry.ref_id}`
-          : `/patients/me/documents/${entry.ref_id}`;
-      await api.delete(path);
-      loadTimeline();
-    } catch (err) {
-      alert(err.response?.data?.detail || `Could not delete this ${label}.`);
     }
   }
 
@@ -122,9 +102,7 @@ export default function PatientDashboard() {
       setFile(null);
       setShowUpload(false);
       setSaveToRecords(false);
-      loadTimeline();
 
-      // show the explanation right away instead of making them find it in the timeline
       const newDocId = res.data.id;
       setJustUploadedId(newDocId);
       fetchExplanation(newDocId);
@@ -139,52 +117,69 @@ export default function PatientDashboard() {
     <div className="min-h-screen bg-page">
       <Header name={me?.full_name} role="patient" />
 
-      <main className="max-w-2xl mx-auto px-6 py-10">
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <h1 className="font-display text-2xl text-ink mb-1">Your Timeline</h1>
-            <p className="text-sm text-ink/50">
-              Every report, note, and check-in, in one place.
-            </p>
-          </div>
-          <div className="flex gap-2 shrink-0">
+      <main className="max-w-3xl mx-auto px-6 py-14">
+        <div className="mb-10">
+          <p className="font-mono text-xs tracking-widest text-primary/60 uppercase mb-3">
+            Your health, threaded together
+          </p>
+          <h1 className="font-display text-3xl text-ink mb-2">
+            {me ? `Welcome back, ${me.full_name.split(" ")[0]}` : "Welcome back"}
+          </h1>
+          <p className="text-ink/50 text-sm max-w-md">
+            Everything's organized and ready — pick up wherever you left off.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {QUICK_ACTIONS.map(({ key, icon: Icon, label, desc, path }) => (
             <button
-              onClick={() => navigate("/patient/records")}
-              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+              key={key}
+              onClick={() => navigate(path)}
+              className="group text-left bg-white border border-line hover:border-primary/40 hover:shadow-md rounded-2xl p-5 transition"
             >
-              Medical Records
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 text-primary mb-4 group-hover:bg-primary group-hover:text-white transition">
+                <Icon size={18} strokeWidth={2} />
+              </span>
+              <p className="text-sm font-medium text-ink mb-1">{label}</p>
+              <p className="text-xs text-ink/45 leading-snug">{desc}</p>
             </button>
-            <button
-              onClick={() => navigate("/patient/symptom-check")}
-              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
-            >
-              Symptom Checker
-            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 mb-10 pb-10 border-b border-line">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => { setShowShare((s) => !s); setShowSecurityLog(false); setShowUpload(false); }}
-              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+              className={`flex items-center gap-1.5 text-sm font-medium transition ${
+                showShare ? "text-primary" : "text-ink/50 hover:text-primary"
+              }`}
             >
+              <Share2 size={15} strokeWidth={2} />
               Share Access
             </button>
             <button
-              onClick={() => navigate("/patient/skin-check")}
-              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
-            >
-              Skin Check
-            </button>
-            <button
               onClick={() => { setShowSecurityLog((s) => !s); setShowShare(false); setShowUpload(false); }}
-              className="bg-white border border-line hover:border-primary/40 text-ink/70 text-sm font-medium rounded-lg px-3 py-2 transition"
+              className={`flex items-center gap-1.5 text-sm font-medium transition ${
+                showSecurityLog ? "text-primary" : "text-ink/50 hover:text-primary"
+              }`}
             >
+              <ShieldCheck size={15} strokeWidth={2} />
               Security Log
             </button>
-            <button
-              onClick={() => { setShowUpload((s) => !s); setShowShare(false); setShowSecurityLog(false); }}
-              className="bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-4 py-2 transition"
-            >
-              {showUpload ? "Cancel" : "Explain a Document"}
-            </button>
           </div>
+          <button
+            onClick={() => { setShowUpload((s) => !s); setShowShare(false); setShowSecurityLog(false); }}
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg px-4 py-2.5 transition shrink-0"
+          >
+            {showUpload ? (
+              "Cancel"
+            ) : (
+              <>
+                <Upload size={15} strokeWidth={2} />
+                Explain a Document
+              </>
+            )}
+          </button>
         </div>
 
         {showShare && <ShareAccessPanel onClose={() => setShowShare(false)} />}
@@ -193,10 +188,31 @@ export default function PatientDashboard() {
         {showUpload && (
           <form
             onSubmit={handleUpload}
-            className="bg-white border border-line rounded-2xl p-6 mb-8 space-y-4"
+            className="bg-white border border-line rounded-2xl p-6 mb-6 space-y-4"
           >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
+                  <Upload size={16} strokeWidth={2} />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-ink">Explain a Document</p>
+                  <p className="text-xs text-ink/40">
+                    Get a plain-language explanation and ask follow-ups.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUpload(false)}
+                className="text-ink/30 hover:text-ink/60 transition shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
             <p className="text-xs text-ink/40 -mt-1">
-              Quick look — get an explanation and ask follow-ups. Won't appear in Medical Records unless you choose to save it below.
+              Won't appear in Medical Records unless you choose to save it below.
             </p>
             <div>
               <label className="block text-xs font-medium text-ink/60 mb-1.5">Document type</label>
@@ -254,114 +270,24 @@ export default function PatientDashboard() {
         )}
 
         {justUploadedId && (
-          <div className="bg-white border-2 border-primary/20 rounded-2xl p-6 mb-8">
-            <p className="text-xs font-mono uppercase tracking-wide text-primary/70 mb-3">
-              Just uploaded
-            </p>
+          <div className="bg-white border-2 border-primary/20 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-mono uppercase tracking-wide text-primary/70">
+                Just uploaded
+              </p>
+              <button
+                onClick={() => navigate("/patient/timeline")}
+                className="flex items-center gap-1 text-xs text-primary/70 hover:text-primary transition"
+              >
+                View in timeline <ArrowRight size={12} />
+              </button>
+            </div>
             <DocumentExplanation
               documentId={justUploadedId}
               explanation={explanations[justUploadedId]}
               onClose={() => setJustUploadedId(null)}
             />
           </div>
-        )}
-
-        {loading && (
-          <div className="flex items-center gap-2 text-sm text-ink/40 py-8">
-            <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            Loading your timeline…
-          </div>
-        )}
-
-        {!loading && entries.length === 0 && (
-          <div className="text-center py-16 border border-dashed border-line rounded-2xl">
-            <p className="text-ink/50 text-sm">
-              Nothing here yet — upload a report to get started.
-            </p>
-          </div>
-        )}
-
-        {!loading && entries.length > 0 && (
-          <ol className="relative">
-            <div className="absolute left-[7px] top-2 bottom-2 w-px bg-line" />
-
-            {entries.map((e) => {
-              const isDoc = e.entry_type === "document";
-              const isSymptomCheck = e.entry_type === "symptom_check";
-              const isNote = e.entry_type === "doctor_note";
-              const isDeletable = isDoc || isSymptomCheck;
-              const isClickable = isDoc || isNote;
-              const isExpanded = expandedId === e.ref_id;
-
-              return (
-                <li key={e.id} className="relative pl-8 pb-7 last:pb-0">
-                  <span className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-white border-2 border-sage flex items-center justify-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sage" />
-                  </span>
-
-                  <div className="bg-white border border-line rounded-xl overflow-hidden shadow-sm">
-                    <div
-                      className={`px-4 py-3 ${isClickable ? "cursor-pointer hover:bg-page/60" : ""} transition`}
-                      onClick={isDoc ? () => toggleExplanation(e) : isNote ? () => toggleNote(e) : undefined}
-                    >
-                      <div className="flex items-center justify-between gap-3 mb-1">
-                        <span className="text-[11px] font-mono uppercase tracking-wide text-primary/70">
-                          {ENTRY_LABELS[e.entry_type] || e.entry_type}
-                        </span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[11px] font-mono text-ink/35">
-                            {new Date(e.occurred_at).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </span>
-                          {isDeletable && (
-                            <button
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                handleDelete(e);
-                              }}
-                              className="text-xs font-medium text-red-500 hover:text-white hover:bg-red-500 border border-red-200 hover:border-red-500 rounded-md px-2 py-0.5 transition"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm text-ink">{e.summary}</p>
-                        {isDoc && (
-                          <span className="text-xs text-primary/60 shrink-0">
-                            {isExpanded ? "Hide explanation ▲" : "View explanation ▾"}
-                          </span>
-                        )}
-                        {isNote && (
-                          <span className="text-xs text-primary/60 shrink-0">
-                            {isExpanded ? "Hide note ▲" : "Read note ▾"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {isDoc && isExpanded && (
-                      <div className="px-4 py-3 bg-page/50 border-t border-line">
-                        <DocumentExplanation
-                          documentId={e.ref_id}
-                          explanation={explanations[e.ref_id]}
-                        />
-                      </div>
-                    )}
-                    {isNote && isExpanded && (
-                      <div className="px-4 py-3 bg-page/50 border-t border-line text-sm text-ink/80">
-                        {notesById ? (notesById[e.ref_id]?.note || "Note not found.") : "Loading…"}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
         )}
       </main>
     </div>
