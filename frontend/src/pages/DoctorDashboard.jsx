@@ -51,10 +51,37 @@ export default function DoctorDashboard() {
       <Header name={me?.full_name} role="doctor" />
 
       <main className="max-w-2xl mx-auto px-6 py-10">
-        <h1 className="font-display text-2xl text-ink mb-1">My Patients</h1>
+                <h1 className="font-display text-2xl text-ink mb-1">
+          {me ? `Welcome back, ${me.full_name.split(" ").slice(-1)[0]}` : "My Patients"}
+        </h1>
         <p className="text-sm text-ink/50 mb-5">
           Patients who've shared timeline access with you.
         </p>
+
+        {!loading && patients.length > 0 && (
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="bg-white border border-line rounded-xl px-4 py-3">
+              <p className="font-display text-xl text-ink">{patients.length}</p>
+              <p className="text-xs text-ink/45">
+                {patients.length === 1 ? "Patient" : "Patients"}
+              </p>
+            </div>
+            <div className="bg-white border border-line rounded-xl px-4 py-3">
+              <p className="font-display text-xl text-ink">
+                {patients.reduce((sum, p) => sum + p.shared_document_count, 0)}
+              </p>
+              <p className="text-xs text-ink/45">Shared docs</p>
+            </div>
+            <div className="bg-white border border-line rounded-xl px-4 py-3">
+              <p className="font-display text-xl text-primary">
+                {patients.reduce((sum, p) => sum + p.new_items_count, 0)}
+              </p>
+              <p className="text-xs text-ink/45">New items</p>
+            </div>
+          </div>
+        )}
+
+      
 
         {!loading && patients.length > 0 && (
           <input
