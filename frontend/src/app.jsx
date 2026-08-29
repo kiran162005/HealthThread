@@ -6,6 +6,8 @@ import MedicalRecords from "./pages/MedicalRecords.jsx";
 import DoctorDashboard from "./pages/DoctorDashboard.jsx";
 import DoctorPatientView from "./pages/DoctorPatientView.jsx";
 import SkinCheck from "./pages/SkinCheck.jsx";
+import Home from "./pages/Home.jsx";
+import Timeline from "./pages/Timeline.jsx";
 
 function getRole() {
   return localStorage.getItem("role");
@@ -21,6 +23,7 @@ function ProtectedRoute({ role, children }) {
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/patient"
@@ -54,6 +57,16 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route
+        path="/patient/timeline"
+        element={
+          <ProtectedRoute role="patient">
+            <Timeline />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/doctor"
         element={
@@ -70,7 +83,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
