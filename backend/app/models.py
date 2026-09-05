@@ -47,6 +47,12 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
+    # ECDSA (P-256) keypair for signing this user's audit log entries.
+    # Generated lazily on first audit event (see security.get_or_create_keypair)
+    # rather than at registration, so existing accounts don't need backfilling.
+    ec_private_key_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ec_public_key_pem: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 class PatientProfile(Base):
     __tablename__ = "patient_profiles"
