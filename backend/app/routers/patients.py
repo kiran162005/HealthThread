@@ -497,3 +497,15 @@ def get_my_audit_log(
         }
         for entry, actor in rows
     ]
+
+@router.get("/me/audit-log/verify")
+def verify_my_audit_log(
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    """Runs the hash-chain + signature check over this patient's audit
+    log and returns the result. This is the actual proof that the log
+    hasn't been tampered with — not just a claim that it's tamper-evident.
+    """
+    result = security.verify_chain(db, user.id)
+    return result
