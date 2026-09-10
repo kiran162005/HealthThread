@@ -8,6 +8,7 @@ import DoctorPatientView from "./pages/DoctorPatientView.jsx";
 import SkinCheck from "./pages/SkinCheck.jsx";
 import Home from "./pages/Home.jsx";
 import Timeline from "./pages/Timeline.jsx";
+import BabyGrowth from "./pages/BabyGrowth.jsx";
 
 function getRole() {
   return localStorage.getItem("role");
@@ -80,6 +81,14 @@ export default function App() {
         element={
           <ProtectedRoute role="doctor">
             <DoctorPatientView />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/patient/baby-growth"
+        element={
+          <ProtectedRoute role="patient">
+            <BabyGrowth />
           </ProtectedRoute>
         }
       />
