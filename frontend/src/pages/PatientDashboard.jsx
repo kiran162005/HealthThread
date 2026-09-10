@@ -15,6 +15,7 @@ import {
   X,
   History,
   ArrowRight,
+  Baby,
 } from "lucide-react";
 
 const QUICK_ACTIONS = [
@@ -46,6 +47,13 @@ const QUICK_ACTIONS = [
     desc: "Upload a photo, get a read",
     path: "/patient/skin-check",
   },
+  {
+  key: "baby",
+  icon: Baby,
+  label: "Baby Growth",
+  desc: "Track weight & length",
+  path: "/patient/baby-growth",
+},
 ];
 
 export default function PatientDashboard() {
@@ -130,7 +138,7 @@ export default function PatientDashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           {QUICK_ACTIONS.map(({ key, icon: Icon, label, desc, path }) => (
             <button
               key={key}
