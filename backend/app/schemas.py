@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response bodies."""
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Literal
 
 from pydantic import BaseModel, EmailStr
@@ -111,3 +111,42 @@ class DoctorNoteOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BabyProfileCreate(BaseModel):
+    name: str
+    date_of_birth: date
+    sex: Optional[Literal["male", "female"]] = None
+
+
+class BabyProfileOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    date_of_birth: date
+    sex: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GrowthEntryCreate(BaseModel):
+    recorded_at: date
+    weight_kg: Optional[float] = None
+    height_cm: Optional[float] = None
+    head_circ_cm: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class GrowthEntryOut(BaseModel):
+    id: uuid.UUID
+    recorded_at: date
+    weight_kg: Optional[float]
+    height_cm: Optional[float]
+    head_circ_cm: Optional[float]
+    notes: Optional[str]
+    age_months: float
+    weight_percentile: Optional[float] = None
+    weight_percentile_label: Optional[str] = None
+    height_percentile: Optional[float] = None
+    height_percentile_label: Optional[str] = None
