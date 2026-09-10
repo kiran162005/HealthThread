@@ -22,3 +22,5 @@ torch==2.6.0
 torchvision==0.21.0
 datasets==3.0.1
 Pillow==10.4.0
+
+recharts
