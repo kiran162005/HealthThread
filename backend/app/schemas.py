@@ -150,3 +150,18 @@ class GrowthEntryOut(BaseModel):
     weight_percentile_label: Optional[str] = None
     height_percentile: Optional[float] = None
     height_percentile_label: Optional[str] = None
+
+class MilestoneOut(BaseModel):
+    key: str
+    name: str
+    kind: Literal["vaccine", "checkup"]
+    age_label: str
+    due_date: date
+    status: Literal["completed", "overdue", "due_soon", "upcoming"]
+    completed_at: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class MilestoneCompleteRequest(BaseModel):
+    completed_at: date
+    notes: Optional[str] = None
