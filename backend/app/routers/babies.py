@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app import models, schemas, auth
-from app.services import growth_reference
+from app.services import growth_reference, vaccination_schedule
 
 router = APIRouter(prefix="/patients/me/babies", tags=["babies"])
 require_patient = auth.require_role("patient")
@@ -142,3 +142,113 @@ def delete_growth_entry(
         raise HTTPException(status_code=404, detail="Growth entry not found")
     db.delete(entry)
     db.commit()
+
+def _milestone_status(due_date: date, completed_at: date | None, today: date) -> str:
+    if completed_at is not None:
+        return "completed"
+    if due_date < today:
+        return "overdue"
+    if due_date <= today + timedelta(days=14):
+        return "due_soon"
+    return "upcoming"
+
+
+@router.get("/{baby_id}/milestones", response_model=list[schemas.MilestoneOut])
+def list_milestones(
+    baby_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    baby = _get_owned_baby(db, baby_id, user)
+    today = date.today()
+
+    completions = db.execute(
+        select(models.BabyMilestoneCompletion)
+        .where(models.BabyMilestoneCompletion.baby_id == baby.id)
+    ).scalars().all()
+    completed_by_key = {c.milestone_key: c for c in completions}
+
+    results = []
+    for item in vaccination_schedule.get_schedule():
+        due_date = baby.date_of_birth + timedelta(days=item["age_days"])
+        completion = completed_by_key.get(item["key"])
+        results.append(schemas.MilestoneOut(
+            key=item["key"],
+            name=item["name"],
+            kind=item["kind"],
+            age_label=item["age_label"],
+            due_date=due_date,
+            status=_milestone_status(due_date, completion.completed_at if completion else None, today),
+            completed_at=completion.completed_at if completion else None,
+            notes=completion.notes if completion else None,
+        ))
+    return results
+
+
+@router.post("/{baby_id}/milestones/{milestone_key}/complete", response_model=schemas.MilestoneOut)
+def complete_milestone(
+    baby_id: uuid.UUID,
+    milestone_key: str,
+    payload: schemas.MilestoneCompleteRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    baby = _get_owned_baby(db, baby_id, user)
+
+    schedule_item = next(
+        (i for i in vaccination_schedule.get_schedule() if i["key"] == milestone_key), None
+    )
+    if not schedule_item:
+        raise HTTPException(status_code=404, detail="Unknown milestone")
+
+    existing = db.execute(
+        select(models.BabyMilestoneCompletion).where(
+            models.BabyMilestoneCompletion.baby_id == baby.id,
+            models.BabyMilestoneCompletion.milestone_key == milestone_key,
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        existing.completed_at = payload.completed_at
+        existing.notes = payload.notes
+    else:
+        existing = models.BabyMilestoneCompletion(
+            baby_id=baby.id,
+            milestone_key=milestone_key,
+            completed_at=payload.completed_at,
+            notes=payload.notes,
+        )
+        db.add(existing)
+    db.commit()
+    db.refresh(existing)
+
+    due_date = baby.date_of_birth + timedelta(days=schedule_item["age_days"])
+    return schemas.MilestoneOut(
+        key=schedule_item["key"],
+        name=schedule_item["name"],
+        kind=schedule_item["kind"],
+        age_label=schedule_item["age_label"],
+        due_date=due_date,
+        status="completed",
+        completed_at=existing.completed_at,
+        notes=existing.notes,
+    )
+
+
+@router.delete("/{baby_id}/milestones/{milestone_key}/complete", status_code=204)
+def uncomplete_milestone(
+    baby_id: uuid.UUID,
+    milestone_key: str,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_patient),
+):
+    baby = _get_owned_baby(db, baby_id, user)
+    existing = db.execute(
+        select(models.BabyMilestoneCompletion).where(
+            models.BabyMilestoneCompletion.baby_id == baby.id,
+            models.BabyMilestoneCompletion.milestone_key == milestone_key,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        db.delete(existing)
+        db.commit()
