@@ -229,3 +229,20 @@ class AuditLog(Base):
     prev_hash: Mapped[str] = mapped_column(String, nullable=False)
     entry_hash: Mapped[str] = mapped_column(String, nullable=False)
     signature: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class BabyMilestoneCompletion(Base):
+    """Tracks which vaccines/checkups have been marked done for a baby.
+    The full schedule (what's due and when) lives in
+    app/services/vaccination_schedule.py, not in the database — this
+    table only stores the "yes, this happened" side of things.
+    """
+    __tablename__ = "baby_milestone_completions"
+    __table_args__ = (UniqueConstraint("baby_id", "milestone_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
+    baby_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("baby_profiles.id", ondelete="CASCADE"))
+    milestone_key: Mapped[str] = mapped_column(String, nullable=False)
+    completed_at: Mapped[date] = mapped_column(Date, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
